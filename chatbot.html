@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Chatbot con Voz</title>
+  <title>Chatbot con Voz y Micrófono</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -34,24 +34,34 @@
     input, button {
       padding: 0.5rem;
       font-size: 1rem;
+      margin-right: 0.5rem;
     }
   </style>
 </head>
 <body>
   <div id="chat">
-    <h2>Chatbot con Voz</h2>
+    <h2>Chatbot con Voz y Micrófono</h2>
     <div id="messages"></div>
     <input type="text" id="input" placeholder="Escribe algo..." />
     <button onclick="enviarMensaje()">Enviar</button>
+    <button onclick="escuchar()">🎤 Hablar</button>
+    <button onclick="callar()">🔇 Callar</button>
   </div>
 
   <script>
     const url = 'https://magicloops.dev/api/loop/2127da52-9a2d-4811-84b7-d615cf55677b/run';
+    let vozActiva = null;
 
     function hablar(texto) {
+      if (vozActiva) speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(texto);
       utterance.lang = "es-ES";
+      vozActiva = utterance;
       speechSynthesis.speak(utterance);
+    }
+
+    function callar() {
+      speechSynthesis.cancel();
     }
 
     function agregarMensaje(texto, clase) {
@@ -62,9 +72,9 @@
       document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
     }
 
-    async function enviarMensaje() {
+    async function enviarMensaje(mensajeManual = null) {
       const input = document.getElementById('input');
-      const mensaje = input.value.trim();
+      const mensaje = mensajeManual || input.value.trim();
       if (mensaje === "") return;
 
       agregarMensaje("Tú: " + mensaje, "user");
@@ -78,30 +88,50 @@
       }
 
       try {
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ input: mensaje })
-        });
-
+        const response = await fetch(`${url}?input=${encodeURIComponent(mensaje)}`);
         const data = await response.json();
         const respuesta = data.response;
         agregarMensaje("Bot: " + respuesta, "bot");
         hablar(respuesta);
       } catch (error) {
-        const errorMsg = "Hubo un error al contactar con el servidor.";
+        const errorMsg = "Error al contactar con el servidor.";
         agregarMensaje("Bot: " + errorMsg, "bot");
         hablar(errorMsg);
         console.error(error);
       }
     }
 
-    document.getElementById("input").addEventListener("keypress", function (e) {
-      if (e.key === "Enter") {
-        enviarMensaje();
+    // Reconocimiento de voz
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const reconocimiento = SpeechRecognition ? new SpeechRecognition() : null;
+
+    if (reconocimiento) {
+      reconocimiento.lang = "es-ES";
+      reconocimiento.continuous = false;
+      reconocimiento.interimResults = false;
+
+      reconocimiento.onresult = (event) => {
+        const texto = event.results[0][0].transcript;
+        document.getElementById('input').value = texto;
+        enviarMensaje(texto);
+      };
+
+      reconocimiento.onerror = (event) => {
+        console.error("Error en reconocimiento de voz:", event.error);
+      };
+    } else {
+      alert("Tu navegador no soporta reconocimiento de voz.");
+    }
+
+    function escuchar() {
+      if (reconocimiento) {
+        reconocimiento.start();
       }
+    }
+
+    // Enviar con Enter
+    document.getElementById("input").addEventListener("keypress", function (e) {
+      if (e.key === "Enter") enviarMensaje();
     });
   </script>
 </body>
